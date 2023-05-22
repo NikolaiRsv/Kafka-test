@@ -1,18 +1,30 @@
 ﻿using Confluent.Kafka;
+using Newtonsoft.Json;
+using System;
 
-namespace YourNamespace
+namespace KafkaApp
 {
     public class Producer : IDisposable
     {
-        private IProducer<Null, string> producer;
+        private readonly IProducer<Null, string> producer;
 
-        public Producer(string bootstrapServers)
+        public Producer(ProducerConfig config)
         {
-            producer = new ProducerBuilder<Null, string>(new ProducerConfig { BootstrapServers = bootstrapServers }).Build();
+            producer = new ProducerBuilder<Null, string>(config).Build();
         }
 
-        public void Produce(string message) => producer.Produce("my-data", new Message<Null, string> { Value = message });
+        public void ProduceMessage(Person person)
+        {
+            var personJson = JsonConvert.SerializeObject(person);
+            var message = new Message<Null, string> { Value = personJson };
 
-        public void Dispose() => producer.Dispose();
+            var deliveryReport = producer.ProduceAsync("my-data", message).GetAwaiter().GetResult();
+            Console.WriteLine($"Produced message - Id: {person.Id}, Name: {person.Name}, Topic: {deliveryReport.Topic}");
+        }
+
+        public void Dispose()
+        {
+            producer.Dispose();
+        }
     }
 }

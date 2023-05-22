@@ -1,37 +1,68 @@
-﻿using System;
+﻿using Confluent.Kafka;
+using Newtonsoft.Json;
+using System;
 
-namespace YourNamespace
+namespace KafkaApp
 {
     class Program
     {
         static void Main(string[] args)
         {
-            using (var consumer = new Consumer("localhost:9092", "my-data"))
-            using (var producer = new Producer("localhost:9092"))
+            var config = new ConsumerConfig
             {
-                Console.WriteLine("Enter 'consume' to start consuming messages, 'produce' to start producing messages, or 'exit' to quit:");
+                BootstrapServers = "localhost:9092",
+                GroupId = "your-group-id",
+                AutoOffsetReset = AutoOffsetReset.Earliest,
+                EnableAutoCommit = true
+            };
 
-                string command;
-                while ((command = Console.ReadLine()) != "exit")
+            var producerConfig = new ProducerConfig
+            {
+                BootstrapServers = "localhost:9092"
+            };
+
+            var consumer = new Consumer(config);
+            var producer = new Producer(producerConfig);
+
+            Console.WriteLine("Enter 'consume' to start consuming messages, 'produce' to start producing messages, or 'exit' to quit:");
+
+            string command;
+            while ((command = Console.ReadLine()) != "exit")
+            {
+                if (command == "consume")
                 {
-                    if (command == "consume")
+                    consumer.StartConsuming();
+                }
+                else if (command == "produce")
+                {
+                    Console.WriteLine("Producing messages. Enter values for Id and Name or 'stop' to stop producing:");
+
+                    string input;
+                    while ((input = Console.ReadLine()) != "stop")
                     {
-                        Console.WriteLine("Consuming messages. Enter 'stop' to stop consuming:");
-                        consumer.Start();
-                        while (Console.ReadLine() != "stop") { }
-                        consumer.Stop();
-                        Console.WriteLine("Stopped consuming messages.");
+                        string[] values = input.Split(',');
+
+                        if (values.Length == 2 && int.TryParse(values[0].Trim(), out int id))
+                        {
+                            var person = new Person { Id = id, Name = values[1].Trim() };
+                            producer.ProduceMessage(person);
+                        }
+                        else
+                        {
+                            Console.WriteLine("Invalid input. Please enter Id and Name separated by a comma.");
+                        }
                     }
-                    else if (command == "produce")
-                    {
-                        Console.WriteLine("Producing messages. Enter messages to send or 'stop' to stop producing:");
-                        string message;
-                        while ((message = Console.ReadLine()) != "stop") producer.Produce(message);
-                        Console.WriteLine("Stopped producing messages.");
-                    }
-                    else Console.WriteLine("Invalid command. Enter 'consume' to start consuming messages, 'produce' to start producing messages, or 'exit' to quit.");
+
+                    Console.WriteLine("Stopped producing messages.");
+                }
+                else
+                {
+                    Console.WriteLine("Invalid command. Enter 'consume' to start consuming messages, 'produce' to start producing messages, or 'exit' to quit.");
                 }
             }
+
+            consumer.StopConsuming();
+            producer.Dispose();
         }
     }
 }

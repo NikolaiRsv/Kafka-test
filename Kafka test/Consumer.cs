@@ -1,44 +1,62 @@
-﻿using System;
-using System.Threading;
-using Confluent.Kafka;
+﻿using Confluent.Kafka;
+using Newtonsoft.Json;
+using System;
 
-namespace YourNamespace
+namespace KafkaApp
 {
-    public class Consumer : IDisposable
+    public class MessageConsumer
     {
-        private IConsumer<Ignore, string> consumer;
-        private Thread consumingThread;
-        private CancellationTokenSource cancellationTokenSource;
+        private readonly IConsumer<Ignore, string> consumer;
 
-        public Consumer(string bootstrapServers, string groupId)
+        public MessageConsumer(ConsumerConfig config)
         {
-            consumer = new ConsumerBuilder<Ignore, string>(new ConsumerConfig
+            consumer = new ConsumerBuilder<Ignore, string>(config).Build();
+        }
+
+        public void StartConsuming()
+        {
+            Console.WriteLine("Consuming messages. Enter 'stop' to stop consuming:");
+
+            consumer.Subscribe("my-data");
+
+            try
             {
-                BootstrapServers = bootstrapServers,
-                GroupId = groupId,
-                AutoOffsetReset = AutoOffsetReset.Earliest,
-                EnableAutoCommit = true
-            }).Build();
-        }
+                while (true)
+                {
+                    var consumeResult = consumer.Consume();
+                    var personJson = consumeResult.Message.Value;
 
-        public void Start()
-        {
-            cancellationTokenSource = new CancellationTokenSource();
-            consumingThread = new Thread(() =>
+                    if (!string.IsNullOrEmpty(personJson))
+                    {
+                        var person = JsonConvert.DeserializeObject<Person>(personJson);
+
+                        if (person != null)
+                        {
+                            Console.WriteLine($"Received message - Id: {person.Id}, Name: {person.Name}");
+                        }
+                    }
+
+                    if (consumeResult.IsPartitionEOF)
+                    {
+                        Console.WriteLine($"Reached end of partition: {consumeResult.TopicPartitionOffset}");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
             {
-                consumer.Subscribe("my-data");
-                try { while (true) Console.WriteLine($"Received message: {consumer.Consume(cancellationTokenSource.Token).Message.Value}"); }
-                catch (OperationCanceledException) { }
-            });
-            consumingThread.Start();
+            }
+            finally
+            {
+                consumer.Close();
+                consumer.Dispose();
+            }
+
+            Console.WriteLine("Stopped consuming messages.");
         }
 
-        public void Stop()
+        public void StopConsuming()
         {
-            cancellationTokenSource.Cancel();
-            consumingThread.Join();
+            consumer.Close();
         }
-
-        public void Dispose() => consumer.Close();
     }
 }
